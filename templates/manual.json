@@ -1,0 +1,7 @@
+[
+  {
+    "tag": "proxy",
+    "type": "selector",
+    "outbounds": ["URL-TEST"]
+  }
+]
