@@ -2,18 +2,20 @@
 
 function detect_type($input)
 {
-    $type = "";
+    
     if (substr($input, 0, 8) === "vmess://") {
-        $type = "vmess";
+        return "vmess";
     } elseif (substr($input, 0, 8) === "vless://") {
-        $type = "vless";
+        return "vless";
     } elseif (substr($input, 0, 9) === "trojan://") {
-        $type = "trojan";
+        return "trojan";
     } elseif (substr($input, 0, 5) === "ss://") {
-        $type = "ss";
+        return "ss";
+    } elseif (substr($input, 0, 7) === "tuic://") {
+        return "tuic";
     }
 
-    return $type;
+    return null;
 }
 
 function parse_config($input)
@@ -31,6 +33,8 @@ function parse_config($input)
         case "ss":
             $parsed_config = ParseShadowsocks($input);
             break;
+        case "tuic":
+            $parsed_config = ParseTuic($input);
     }
     return $parsed_config;
 }
@@ -98,6 +102,30 @@ function ParseShadowsocks($config_str)
 
     // Return the server configuration as a JSON string
     return $server;
+}
+
+function ParseTuic ($config_str) {
+    $parsedUrl = parse_url($config_str);
+
+    // Extract the parameters from the query string
+    $params = [];
+    if (isset($parsedUrl["query"])) {
+        parse_str($parsedUrl["query"], $params);
+    }
+
+    // Construct the output object
+    $output = [
+        "protocol" => "tuic",
+        "username" => isset($parsedUrl["user"]) ? $parsedUrl["user"] : "",
+        "password" => isset($parsedUrl["pass"]) ? $parsedUrl["pass"] : "",
+        "hostname" => isset($parsedUrl["host"]) ? $parsedUrl["host"] : "",
+        "port" => isset($parsedUrl["port"]) ? $parsedUrl["port"] : "",
+        "params" => $params,
+        "hash" => isset($parsedUrl["fragment"]) ? $parsedUrl["fragment"] : "",
+    ];
+
+    return $output;
+
 }
 
 
