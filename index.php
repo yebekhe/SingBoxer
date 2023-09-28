@@ -3,6 +3,13 @@
 header("Content-type: application/json;");
 error_reporting(0);
 include "functions.php";
+  
+function create_tehran_timestamp_tomorrow() {
+  date_default_timezone_set('Asia/Tehran');
+  $dateTomorrow = new DateTime('tomorrow');
+  $timestampTomorrow = strtotime($dateTomorrow->format('Y-m-d H:i:s'));
+  return $timestampTomorrow;
+}
 
 function generateUniqueRandomNumbers($max, $count)
 {
@@ -32,12 +39,30 @@ function process_jsons($input, $locationNames)
 
 function extract_names($input)
 {
+    $locationNames = array();
     foreach ($input as $config) {
         if ($config["tag"] !== "") {
             $locationNames[] = $config["tag"];
         }
     }
     return $locationNames;
+}
+  
+function processWsPath($input) {
+  if (strpos($input, '/') === 0) {
+    $input = substr($input, 1);
+  }
+  $max_early_data = 0;
+  if (strpos($input, '?ed=2048') !== false) {
+    $input = str_replace('?ed=2048', '', $input);
+    $max_early_data = 2048;
+  }
+  $output = [
+      "path" => "/" . $input,
+      "max_early_data" => $max_early_data
+  ];
+  
+  return $output;
 }
 
 function VmessSingbox($VmessUrl, $counter)
@@ -79,11 +104,12 @@ function VmessSingbox($VmessUrl, $counter)
             ],
         ];
     }
-
+    
     if ($decode_vmess["net"] === "ws") {
+        $pathProcess = processWsPath($decode_vmess["path"]);
         $configResult["transport"] = [
             "type" => $decode_vmess["net"],
-            "path" => strpos($decode_vmess["path"], '/') === 0 ? $decode_vmess["path"] : "/" . $decode_vmess["path"],
+            "path" => $pathProcess['path'],
             "headers" => [
                 "Host" =>
                     $decode_vmess["host"] !== ""
@@ -92,7 +118,7 @@ function VmessSingbox($VmessUrl, $counter)
                             ? $decode_vmess["add"]
                             : ""),
             ],
-            "max_early_data" => 0,
+            "max_early_data" => $pathProcess['max_early_data'],
             "early_data_header_name" => "Sec-WebSocket-Protocol",
         ];
     } elseif ($decode_vmess["net"] === "grpc") {
@@ -173,13 +199,13 @@ function VlessSingbox($VlessUrl, $counter)
     $transportTypes = [
         "ws" => [
             "type" => $decoded_vless["params"]["type"],
-            "path" => strpos($decoded_vless["params"]["path"], '/') === 0 ? $decoded_vless["params"]["path"] : "/" . $decoded_vless["params"]["path"],
+            "path" => processWsPath($decoded_vless["params"]["path"])['path'],
             "headers" => [
                 "Host" => !is_null($decoded_vless["params"]["host"])
                     ? $decoded_vless["params"]["host"]
                     : "",
             ],
-            "max_early_data" => 0,
+            "max_early_data" => processWsPath($decoded_vless["params"]["path"])['max_early_data'],
             "early_data_header_name" => "Sec-WebSocket-Protocol",
         ],
         "grpc" => [
@@ -201,7 +227,7 @@ function VlessSingbox($VlessUrl, $counter)
     }
     return $configResult;
 }
-
+  
 function TrojanSingbox($TrojanUrl, $counter)
 {
     $decoded_trojan = parseProxyUrl($TrojanUrl);
@@ -241,7 +267,7 @@ function TrojanSingbox($TrojanUrl, $counter)
     $transportTypes = [
         "ws" => [
             "type" => $decoded_trojan["params"]["type"],
-            "path" => strpos($decoded_trojan["params"]["path"], '/') === 0 ? $decoded_trojan["params"]["path"] : "/" . $decoded_trojan["params"]["path"],
+            "path" => processWsPath($decoded_trojan["params"]["path"])["path"],
             "headers" => [
                 "Host" => $decoded_trojan["params"]["host"],
             ],
@@ -266,29 +292,24 @@ function TrojanSingbox($TrojanUrl, $counter)
     return $configResult;
 }
 
-function ShadowsocksSingbox($ShadowsocksUrl, $counter)
-{
+function ShadowsocksSingbox($ShadowsocksUrl, $counter) {
     $decoded_shadowsocks = ParseShadowsocks($ShadowsocksUrl);
-    if (
-        is_null($decoded_shadowsocks["name"]) ||
-        $decoded_shadowsocks["name"] === ""
-    ) {
+    if (is_null($decoded_shadowsocks['name']) || $decoded_shadowsocks['name'] === ""){
+        return null;
+    }
+    if ($decoded_shadowsocks['encryption_method'] === "chacha20-poly1305") {
         return null;
     }
     $configResult = [
-        "tag" => $decoded_shadowsocks["name"] . " | " . $counter,
-        "type" => "shadowsocks",
-        "server" => $decoded_shadowsocks["server_address"],
-        "server_port" => intval($decoded_shadowsocks["server_port"]),
-        "method" => isset($decoded_shadowsocks["encryption_method"]) && $decoded_shadowsocks["encryption_method"] !== "" ? $decoded_shadowsocks["encryption_method"] : "chacha20-ietf-poly1305",
-        "password" => $decoded_shadowsocks["password"],
-        "plugin" => "",
-        "plugin_opts" => "",
+        'tag' => $decoded_shadowsocks['name'] . " | " . $counter,
+        'type' => "shadowsocks",
+        'server' => $decoded_shadowsocks['server_address'],
+        'server_port' => intval($decoded_shadowsocks['server_port']),
+        'method' => $decoded_shadowsocks['encryption_method'],
+        'password' => $decoded_shadowsocks['password'],
+        'plugin' => "",
+        'plugin_opts' => ""
     ];
-  
-    if ($configResult['method'] === "chacha20-poly1305") {
-        return null;
-     }
     return $configResult;
 }
 
@@ -307,7 +328,7 @@ function TuicSingbox($TuicUrl, $counter) {
         "server" => $decodedTuic['hostname'],
         "server_port" => intval($decodedTuic['port']),
         "uuid" => $decodedTuic['username'],
-        "password" => $decodedTuic['password'],
+        "password" => $decodedTuic['pass'],
         "congestion_control" => $decodedTuic['params']['congestion_control'],
         "udp_relay_mode" => $decodedTuic['params']['udp_relay_mode'],
         "zero_rtt_handshake" => false,
@@ -325,6 +346,9 @@ function TuicSingbox($TuicUrl, $counter) {
                 "spdy/3.1"
             ],
         ];
+    if (!isset($decodedTuic['params']['alpn']) || is_null($decodedTuic['params']['alpn']) || $decodedTuic['params']['alpn'] === "") {
+      unset($configResult['tls']["alpn"]);
+    }
 
     return $configResult;
 }
@@ -415,10 +439,16 @@ function GenerateConfigLite($input, $output, $limit = 0, $tun = true)
         $outbound,
         $templateBase["outbounds"]
     );
-    return json_encode(
-        $templateBase,
-        JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-    );
+    $finalJson = json_encode($templateBase, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    $headerText = "//profile-title: base64:Q09OVkVSVEVEIEJZIFRWQw==
+//profile-update-interval: 1
+//subscription-userinfo: upload=0; download=0; total=10737418240000000; expire=2546249531
+//support-url: https://t.me/v2raycollector
+//profile-web-page-url: https://github.com/yebekhe/TelegramV2rayCollector
+
+";
+    $createJsonc = $headerText . $finalJson ;
+    return $createJsonc;
 }
 
 function beginConvertSubLink($subLink, $limit = 0, $tun = true)
@@ -442,6 +472,7 @@ function beginConvertConfigs($configs, $limit = 0, $tun = true)
 
     return $convertedData;
 }
+
   
 $url = filter_input(INPUT_GET, "url", FILTER_VALIDATE_URL);
 $config = filter_input(INPUT_GET, "config", FILTER_SANITIZE_STRING);
